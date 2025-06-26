@@ -27,28 +27,45 @@ Examples:
   python count_lines.py
     """
     valid_extensions = ('.cpp', '.h', '.hpp')
-    total_lines = 0
-    processed_files_details = [] # Stores tuples of (filepath, lines)
+    grand_total_lines = 0
+    folder_line_counts = {} # Stores {folder_path: line_count}
+
+    # Normalize the input folder path to ensure consistent keying for the root folder
+    normalized_folder_path = os.path.normpath(folder_path)
+    if normalized_folder_path not in folder_line_counts:
+        folder_line_counts[normalized_folder_path] = 0
+
 
     print(f"Searching for files in: {folder_path}\n")
 
     for root, _, files in os.walk(folder_path):
+        current_folder_total_lines = 0
+        normalized_root = os.path.normpath(root)
+
+        if normalized_root not in folder_line_counts:
+            folder_line_counts[normalized_root] = 0
+
         for file in files:
             if file.endswith(valid_extensions):
                 filepath = os.path.join(root, file)
                 lines = count_lines_in_file(filepath)
                 if lines >= 0: # Count even if file is empty (0 lines)
-                    processed_files_details.append((filepath, lines))
-                    total_lines += lines
-                # If count_lines_in_file returned a negative or error indicator,
-                # it would have printed an error and we just skip adding it.
+                    folder_line_counts[normalized_root] += lines
+                    grand_total_lines += lines
+                # If count_lines_in_file returned an error, it's already printed
 
-    return processed_files_details, total_lines
+    # Clean up folders with zero lines if they weren't the initial path and had no sub-files
+    # Or, keep them if you want to explicitly show folders that were scanned but empty.
+    # For now, let's keep them to show they were scanned.
+    # If a folder had files but they all had 0 lines, it will be listed with 0.
+
+    return folder_line_counts, grand_total_lines
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Counts lines in C++ source and header files (.cpp, .h, .hpp) "
-                    "in a specified folder (or current directory if no folder is provided) and its subfolders."
+                    "in a specified folder (or current directory if no folder is provided) and its subfolders. "
+                    "Outputs total lines per folder."
     )
     parser.add_argument(
         "folder",
@@ -64,12 +81,20 @@ if __name__ == "__main__":
     if not os.path.isdir(target_folder):
         print(f"Error: Folder not found at '{target_folder}'")
     else:
-        processed_files_details, grand_total_lines = find_and_count_lines(target_folder)
+        folder_line_counts, grand_total_lines = find_and_count_lines(target_folder)
 
-        if processed_files_details:
-            print("\nLine counts per file:")
-            for filepath, lines in processed_files_details:
-                print(f"  {filepath}: {lines} lines")
+        if folder_line_counts:
+            print("\nLine counts per folder:")
+            initial_scan_path = os.path.normpath(target_folder)
+            # Sort by folder path for consistent output
+            for folder, lines in sorted(folder_line_counts.items()):
+                # Only print folders that have lines or was the initial explicitly scanned path
+                if lines > 0 or os.path.normpath(folder) == initial_scan_path:
+                    print(f"  {folder}: {lines} lines")
+
             print(f"\nGrand total lines found: {grand_total_lines}")
         else:
-            print("No matching files found, or all found files were empty/unreadable.")
+            # This case should ideally not be hit if target_folder exists,
+            # as folder_line_counts would at least contain the target_folder itself (possibly with 0 lines).
+            # However, keeping it for robustness.
+            print("No matching files found, or an issue occurred during scanning.")
