@@ -1,0 +1,2 @@
+// another.hpp
+class A {};
